@@ -124,7 +124,7 @@ class FrankRing:
             sector=self.suit.sector,
             ring_pos=self.suit.ring_pos,
         )
-        self._load_peers()
+#        self._load_peers()  # helix_api not yet available
 
         if self.peers.propcoms:
             if not self.peers.validate(self.rec.ball):
@@ -286,3 +286,23 @@ def suit_for(name: str, sector: int, ring_pos: int, family: str = "system") -> S
         name=name, suit_type=suit_type, entry=name,
         sector=sector, ring_pos=ring_pos, family=family
     )
+
+
+def wear(suit: SuitSpec, data: bytes = b"", channel: int = 1, **kwargs):
+    """Wear a suit — create a ring and ride it. One call. Frank wears it."""
+    from franken5 import get_frank
+    ring = FrankRing(suit, get_frank())
+    return ring.ride(data=data, channel=channel, **kwargs)
+
+
+def _load_peers(self):
+    try:
+        from helix_api import Franken2, Freewheeling, Propcoms
+        self.peers.franken2 = Franken2()
+        self.peers.freewheeling = Freewheeling()
+        self.peers.propcoms = Propcoms()
+    except ImportError:
+        pass
+    except Exception as e:
+        import logging
+        logging.getLogger("frank_ring").warning(f"Peer load error: {e}")

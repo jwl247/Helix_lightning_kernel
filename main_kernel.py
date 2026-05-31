@@ -30,6 +30,7 @@ from franken5 import get_frank, FRANK_VERSION
 from helixi import HelixI
 from helixe import HelixE
 from process_library import get_library,boot_library,LIBRARY_VERSION
+from frank_spawn import FrankSpawn
 
 KERNEL_VERSION = "2.0.0"
 
@@ -117,34 +118,10 @@ def boot():
     # ── Step 6: Frank conducts — this is the heartbeat ───────
     log.info("Phoenix kernel fully operational — Frank conducting")
 
-    def dispatch(rec):
-        """
-        Frank's dispatch loop.
-        When Helix-I fires a stage ready interrupt,
-        Frank calls this for each pending ring.
-        Helix-E flushes the output when Frank marks the ring syncing.
-        """
-        log.debug(f"Dispatching ring {rec.ring_id} — {rec.process}")
-        frank.mark_running(rec.ring_id, os.getpid())
-
-        # Pull the stage data from shared memory
-        stage_data = frank.bus.read_stage(rec.ring_id % 64)
-
-        # Call 2 — accumulate
-        rec.call2(stage_data)
-
-        # Helix-E flushes on the egress channel
-        egress_channel = 5 + (rec.ring_id % 4)
-        helix_e.flush_async(egress_channel, rec.ring_id)
-
-        # Call 3 — finalize, check for snap-clone
-        rec.call3(stage_data)
-
-        if rec.pcs and rec.pcs.definitive:
-            log.info(f"Ring {rec.ring_id} definitive — snap-clone triggered")
-
-    # This blocks forever — Frank's heartbeat keeps the kernel alive
-    frank.conduct(dispatch)
+    spawn = FrankSpawn(frank, library)
+    spawn.install()
+    log.info("FrankSpawn online — rings ready")
+    spawn.loop()
 
 
 if __name__ == "__main__":
