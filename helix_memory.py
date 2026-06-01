@@ -156,7 +156,6 @@ class HelixCache:
 
     def get(self, key: str) -> Optional[Any]:
         with self.lock:
-            # L1
             if key in self.l1:
                 self.hits["l1"] += 1
                 b = self.l1[key]
@@ -166,7 +165,6 @@ class HelixCache:
 
             self.misses["l1"] += 1
 
-            # L2
             if key in self.l2:
                 self.hits["l2"] += 1
                 b = self.l2[key]
@@ -179,7 +177,6 @@ class HelixCache:
 
             self.misses["l2"] += 1
 
-            # L3
             if key in self.l3:
                 self.hits["l3"] += 1
                 b = self.l3[key]
@@ -201,7 +198,6 @@ class HelixCache:
             sector: SectorID = SectorID.SECTOR_4,
             pinned: bool = False):
         with self.lock:
-            # Remove from lower tiers if upgrading
             self.l2.pop(key, None)
             self.l3.pop(key, None)
 
@@ -221,12 +217,8 @@ class HelixCache:
             self.l2.pop(key, None)
             self.l3.pop(key, None)
 
-    # ── Tier sizes ────────────────────────────────────────────────────────────
-
     def _tier_size(self, tier: OrderedDict) -> int:
         return sum(b.effective_size for b in tier.values())
-
-    # ── Room-making ───────────────────────────────────────────────────────────
 
     def _make_room_l1(self, needed: int):
         while self._tier_size(self.l1) + needed > self.l1_max and self.l1:
@@ -253,8 +245,6 @@ class HelixCache:
             del self.l3[key]
             self.evictions += 1
 
-    # ── Promote ───────────────────────────────────────────────────────────────
-
     def _promote_l1(self, key: str, b: CacheBlock):
         self.l2.pop(key, None)
         self._make_room_l1(b.size_bytes)
@@ -268,8 +258,6 @@ class HelixCache:
         b.tier = MemoryTier.L2_WARM
         self.l2[key] = b
         self.promotions += 1
-
-    # ── Demote ────────────────────────────────────────────────────────────────
 
     def _demote_l2(self, key: str, b: CacheBlock):
         self.l1.pop(key, None)
@@ -288,27 +276,25 @@ class HelixCache:
         self.l3[key] = b
         self.demotions += 1
 
-    # ── Stats ─────────────────────────────────────────────────────────────────
-
     def stats(self) -> dict:
         with self.lock:
-            total_ops = sum(self.hits.values()) + sum(self.misses.values())
+            total_ops  = sum(self.hits.values()) + sum(self.misses.values())
             total_hits = sum(self.hits.values())
-            hit_rate = (total_hits / total_ops * 100) if total_ops else 100.0
+            hit_rate   = (total_hits / total_ops * 100) if total_ops else 100.0
             return {
-                "l1_items":    len(self.l1),
-                "l2_items":    len(self.l2),
-                "l3_items":    len(self.l3),
-                "l1_mb":       round(self._tier_size(self.l1) / 1048576, 2),
-                "l2_mb":       round(self._tier_size(self.l2) / 1048576, 2),
-                "l3_mb":       round(self._tier_size(self.l3) / 1048576, 2),
-                "hit_rate":    round(hit_rate, 2),
-                "hits":        self.hits,
-                "misses":      self.misses,
-                "promotions":  self.promotions,
-                "demotions":   self.demotions,
+                "l1_items":     len(self.l1),
+                "l2_items":     len(self.l2),
+                "l3_items":     len(self.l3),
+                "l1_mb":        round(self._tier_size(self.l1) / 1048576, 2),
+                "l2_mb":        round(self._tier_size(self.l2) / 1048576, 2),
+                "l3_mb":        round(self._tier_size(self.l3) / 1048576, 2),
+                "hit_rate":     round(hit_rate, 2),
+                "hits":         self.hits,
+                "misses":       self.misses,
+                "promotions":   self.promotions,
+                "demotions":    self.demotions,
                 "compressions": self.compressions,
-                "evictions":   self.evictions,
+                "evictions":    self.evictions,
             }
 
 
@@ -324,13 +310,13 @@ class HelixMemoryManager:
     """
 
     def __init__(self, cache: HelixCache, max_virtual_mb: int = 4096):
-        self.cache       = cache
-        self.max_virtual = max_virtual_mb * 1024 * 1024
+        self.cache           = cache
+        self.max_virtual     = max_virtual_mb * 1024 * 1024
         self.allocations: Dict[str, int] = {}
         self.total_allocated = 0
-        self.lock = threading.RLock()
-        self.total_allocs = 0
-        self.total_frees  = 0
+        self.lock            = threading.RLock()
+        self.total_allocs    = 0
+        self.total_frees     = 0
 
     def malloc(self, key: str, data: Any,
                sector: SectorID = SectorID.SECTOR_4,
@@ -343,9 +329,9 @@ class HelixMemoryManager:
             if self.total_allocated + size > self.max_virtual:
                 return False
             self.cache.put(key, data, size, sector=sector, pinned=pinned)
-            self.allocations[key] = size
-            self.total_allocated += size
-            self.total_allocs += 1
+            self.allocations[key]  = size
+            self.total_allocated  += size
+            self.total_allocs     += 1
             return True
 
     def free(self, key: str) -> bool:
@@ -370,10 +356,10 @@ class HelixMemoryManager:
 
     def stats(self) -> dict:
         return {
-            "allocated_mb":  round(self.total_allocated / 1048576, 2),
+            "allocated_mb":     round(self.total_allocated / 1048576, 2),
             "allocation_count": len(self.allocations),
-            "total_allocs":  self.total_allocs,
-            "total_frees":   self.total_frees,
+            "total_allocs":     self.total_allocs,
+            "total_frees":      self.total_frees,
         }
 
 
@@ -390,11 +376,11 @@ class HelixFS:
 
     def __init__(self, memory: HelixMemoryManager):
         self.memory   = memory
-        self.manifest: Dict[str, dict] = {}   # filepath → metadata
-        self.lock     = threading.RLock()
-        self.reads    = 0
-        self.writes   = 0
-        self.hits     = 0
+        self.manifest: Dict[str, dict] = {}
+        self.lock        = threading.RLock()
+        self.reads       = 0
+        self.writes      = 0
+        self.hits        = 0
         self.disk_reads  = 0
         self.disk_writes = 0
 
@@ -402,7 +388,7 @@ class HelixFS:
              sector: SectorID = SectorID.SECTOR_4) -> Optional[bytes]:
         with self.lock:
             self.reads += 1
-            key = f"fs:{filepath}"
+            key    = f"fs:{filepath}"
             cached = self.memory.read(key)
             if cached is not None:
                 self.hits += 1
@@ -478,36 +464,16 @@ class CastResult:
 
 
 class FrankCastReel:
-    """
-    Frank cast/reel pattern on top of HelixMemory.
-
-    Frank casts:  execute(ring)
-    Ring runs:    does the work
-    Line reels:   result → memory.write(f"frank:cast:{ring}:{ts}", result)
-    Helix holds:  quadralingually, ready in all 4 languages
-
-    Every cast Frank makes reels back into Helix.
-    Nothing moves until Frank says go.
-    No loops — ingress receives, egress delivers, Frank is the only path.
-    """
-
     def __init__(self, memory: HelixMemoryManager):
-        self.memory  = memory
-        self.lock    = threading.RLock()
-        self.casts:  Dict[str, CastResult] = {}
-        self.total_casts  = 0
-        self.total_reeled = 0
+        self.memory        = memory
+        self.lock          = threading.RLock()
+        self.casts: Dict[str, CastResult] = {}
+        self.total_casts   = 0
+        self.total_reeled  = 0
 
-    def cast(self, ring: str,
-             fn: Callable,
-             *args,
-             sector: SectorID = SectorID.FRANK,
-             **kwargs) -> CastResult:
-        """
-        Cast a ring — execute fn, reel result back into Helix memory.
-        Frank is the only caller. Ring is the operation name.
-        """
-        cast_id  = hashlib.sha3_512(
+    def cast(self, ring: str, fn: Callable,
+             *args, sector: SectorID = SectorID.FRANK, **kwargs) -> CastResult:
+        cast_id = hashlib.sha3_512(
             f"{ring}:{time.time()}".encode()
         ).hexdigest()[:16]
         ts = _now()
@@ -521,7 +487,6 @@ class FrankCastReel:
                             result=None, timestamp=ts,
                             ok=False, error=str(e))
 
-        # Reel back into Helix memory
         key = f"frank:cast:{ring}:{ts}"
         self.memory.write(key, {
             "cast_id":   cast_id,
@@ -533,8 +498,8 @@ class FrankCastReel:
         }, sector=sector)
 
         with self.lock:
-            self.casts[cast_id] = cr
-            self.total_casts  += 1
+            self.casts[cast_id]  = cr
+            self.total_casts    += 1
             if cr.ok:
                 self.total_reeled += 1
 
@@ -558,12 +523,6 @@ class FrankCastReel:
 # ============================================================================
 
 class SectorRouter:
-    """
-    Routes memory operations to the correct sector region.
-    Each sector gets its own key namespace — isolation guaranteed.
-    Sector 4 is the vault — never translate inside it.
-    """
-
     SECTOR_PREFIXES = {
         SectorID.SECTOR_1: "s1:",
         SectorID.SECTOR_2: "s2:",
@@ -580,9 +539,7 @@ class SectorRouter:
         return f"{self.SECTOR_PREFIXES[sector]}{name}"
 
     def write(self, sector: SectorID, name: str, data: Any) -> bool:
-        return self.memory.write(
-            self.key(sector, name), data, sector=sector
-        )
+        return self.memory.write(self.key(sector, name), data, sector=sector)
 
     def read(self, sector: SectorID, name: str) -> Optional[Any]:
         return self.memory.read(self.key(sector, name))
@@ -596,52 +553,34 @@ class SectorRouter:
 # ============================================================================
 
 class PCSTorrentModel:
-    """
-    Phoenix Compression-Speed torrent model.
-
-    Core idea: under load, compress more aggressively.
-    More compression = more effective RAM = more throughput.
-    Compression speeds it up — spiral tightens under load.
-
-    Load factor 0.0 = relaxed, no extra compression
-    Load factor 1.0 = maximum compression, all tiers squeezed
-    """
-
     def __init__(self, cache: HelixCache):
-        self.cache      = cache
-        self.load       = 0.0
-        self.lock       = threading.RLock()
-        self.peak_load  = 0.0
-        self.compressions_triggered = 0
+        self.cache                   = cache
+        self.load                    = 0.0
+        self.lock                    = threading.RLock()
+        self.peak_load               = 0.0
+        self.compressions_triggered  = 0
 
     def update_load(self, load_factor: float):
-        """
-        Called by the game engine or Frank when load changes.
-        High load → compress L2 items proactively.
-        """
         with self.lock:
-            self.load = max(0.0, min(1.0, load_factor))
+            self.load      = max(0.0, min(1.0, load_factor))
             self.peak_load = max(self.peak_load, self.load)
-
             if self.load > 0.7:
-                # Proactively compress L2 to make room
                 self._compress_l2()
 
     def _compress_l2(self):
-        """Compress L2 items that aren't pinned."""
         with self.cache.lock:
             for key, block in self.cache.l2.items():
                 if not block.compressed and not block.pinned:
                     saved = block.compress()
                     if saved > 0:
-                        self.cache.compressions += 1
-                        self.compressions_triggered += 1
+                        self.cache.compressions         += 1
+                        self.compressions_triggered     += 1
 
     def stats(self) -> dict:
         return {
-            "load_factor":             round(self.load, 3),
-            "peak_load":               round(self.peak_load, 3),
-            "compressions_triggered":  self.compressions_triggered,
+            "load_factor":            round(self.load, 3),
+            "peak_load":              round(self.peak_load, 3),
+            "compressions_triggered": self.compressions_triggered,
         }
 
 
@@ -653,30 +592,10 @@ class HelixSystem:
     """
     Complete Helix memory stack with Phoenix superpowers.
 
-    Usage:
-        from helix_memory import HelixSystem, SectorID
-        from helix import Helix
-
-        helix    = Helix()                    # clone pool engine
-        memory   = HelixSystem(helix=helix)   # superpowers layer
-        memory.start()
-
-        # Frank cast/reel
-        result = memory.cast("build_package", fn, arg1, arg2)
-
-        # Sector-isolated write
-        memory.sector_write(SectorID.GAME, "player:1", player_state)
-
-        # File through cache
-        data = memory.fs.read("/home/jwlef/Phoenix/src/helix.py",
-                              sector=SectorID.SECTOR_4)
-
-        # Load signal — PCS torrent model
-        memory.signal_load(0.8)   # heavy load → compress → faster
-
-    Configuration for copes (i5-4460, 8GB RAM):
-        l1_mb=128, l2_mb=512, l3_mb=1024, virtual_mb=4096
-        Effective RAM: ~6-8GB (compression ratio ~1.5-2x)
+    Tuned config for CoPES (i5-4460, 8GB RAM, 1.5T dedicated SSD):
+        l1_mb=512, l2_mb=2048, l3_mb=8192, virtual_mb=524288
+        L1/L2 in RAM. L3 compressed, spills to SSD.
+        512GB virtual RAM. PCS torrent model active.
     """
 
     def __init__(self,
@@ -686,7 +605,7 @@ class HelixSystem:
                  l3_mb:      int = 1024,
                  virtual_mb: int = 4096):
 
-        self.helix   = helix   # helix.py Helix instance — optional
+        self.helix   = helix
         self._start  = time.time()
 
         self.cache   = HelixCache(l1_mb, l2_mb, l3_mb)
@@ -711,18 +630,13 @@ class HelixSystem:
                   f"hit_rate={hs['hit_rate_pct']}%")
         print()
 
-    # ── Frank cast/reel ───────────────────────────────────────────────────────
-
     def cast(self, ring: str, fn: Callable,
              *args, sector: SectorID = SectorID.FRANK, **kwargs) -> CastResult:
-        """Frank casts a ring. Result reels back into Helix memory."""
         result = self.frank.cast(ring, fn, *args, sector=sector, **kwargs)
-        # If Helix backend is connected, persist the result there too
         if self.helix and result.ok and result.result is not None:
             try:
                 self.helix.store(
-                    f"frank:cast:{ring}",
-                    result.result,
+                    f"frank:cast:{ring}", result.result,
                     meta={"cast_id": result.cast_id, "ring": ring},
                     note=f"cast:{ring}",
                 )
@@ -730,12 +644,8 @@ class HelixSystem:
                 pass
         return result
 
-    # ── Sector operations ─────────────────────────────────────────────────────
-
     def sector_write(self, sector: SectorID, name: str, data: Any) -> bool:
-        """Write to a sector's isolated memory region."""
         ok = self.sectors.write(sector, name, data)
-        # Persist to Helix clone pool if backend connected
         if ok and self.helix:
             try:
                 self.helix.store(
@@ -747,30 +657,19 @@ class HelixSystem:
         return ok
 
     def sector_read(self, sector: SectorID, name: str) -> Optional[Any]:
-        """Read from a sector's memory region. Falls back to Helix clone pool."""
         result = self.sectors.read(sector, name)
         if result is None and self.helix:
             try:
                 rec = self.helix.get(f"{sector.value}:{name}")
                 if rec:
                     result = rec.data
-                    # Warm it back into memory
                     self.sectors.write(sector, name, result)
             except Exception:
                 pass
         return result
 
-    # ── PCS torrent model ─────────────────────────────────────────────────────
-
     def signal_load(self, load_factor: float):
-        """
-        Signal load to the PCS torrent model.
-        Game engine calls this as player count / activity rises.
-        High load → more compression → more effective RAM → faster.
-        """
         self.pcs.update_load(load_factor)
-
-    # ── Stats ─────────────────────────────────────────────────────────────────
 
     def stats(self) -> dict:
         uptime = time.time() - self._start
@@ -845,30 +744,50 @@ def get_system(helix=None) -> HelixSystem:
         _global_system = HelixSystem(helix=helix)
     return _global_system
 
-def run(data: bytes = b"", ball=None, pcs=None):
-    """
-    Frank suit hook — paging manager.
-    Frank wears this at boot. Runs forever.
-    More load = more compression = more effective RAM = faster.
-    """
-    import psutil
-    import time
 
-    system = get_system()
+# ============================================================================
+# FRANK SUIT HOOK — paging manager
+# Tuned for CoPES: 8GB RAM + 1.5T dedicated SSD
+# L1/L2 in RAM. L3 compressed, spills to SSD.
+# 512GB virtual RAM. More load = more compression = faster.
+# Frank wears this at boot. Runs forever.
+# ============================================================================
+
+def run(data: bytes = b"", ball=None, pcs=None):
+    import psutil
+
+    system = HelixSystem(
+        l1_mb=512,
+        l2_mb=2048,
+        l3_mb=8192,
+        virtual_mb=524288
+    )
     system.start()
 
-    log = __import__('logging').getLogger("helix_memory.run")
-    log.info("Helix paging manager online — monitoring memory pressure")
+    import logging
+    log = logging.getLogger("helix_memory.run")
+    log.info("Helix paging manager online — 512MB L1 / 2GB L2 / 8GB L3 / 512GB vRAM")
+    log.info("PCS torrent model active — more load = more compression = faster")
 
     while True:
         try:
-            mem = psutil.virtual_memory()
+            mem  = psutil.virtual_memory()
+            swap = psutil.swap_memory()
             load = mem.percent / 100.0
             system.signal_load(load)
-            if load > 0.7:
-                log.info(f"Memory pressure {mem.percent:.1f}% — PCS compressing")
+
+            if load > 0.9:
+                log.warning(
+                    f"HIGH pressure {mem.percent:.1f}% RAM / "
+                    f"{swap.percent:.1f}% swap — aggressive compression active"
+                )
+            elif load > 0.7:
+                log.info(
+                    f"Memory pressure {mem.percent:.1f}% — compressing L2/L3"
+                )
         except Exception as e:
             log.error(f"Paging manager error: {e}")
+
         time.sleep(5)
 
 
@@ -884,7 +803,6 @@ if __name__ == "__main__":
     print("=" * 60)
     print()
 
-    # Try to load Helix backend
     helix = None
     try:
         sys.path.insert(0, str(Path(__file__).parent))
@@ -899,56 +817,46 @@ if __name__ == "__main__":
     mem = HelixSystem(helix=helix)
     mem.start()
 
-    # Test 1: Sector isolation
     print("TEST 1: Sector isolation")
     mem.sector_write(SectorID.SECTOR_4, "vault:test", {"secret": "data"})
-    mem.sector_write(SectorID.GAME, "player:1", {"name": "Alice", "score": 0})
-    mem.sector_write(SectorID.FRANK, "output:1", {"cmd": "deploy", "target": "ubuntu"})
+    mem.sector_write(SectorID.GAME,     "player:1",   {"name": "Alice", "score": 0})
+    mem.sector_write(SectorID.FRANK,    "output:1",   {"cmd": "deploy", "target": "ubuntu"})
     v = mem.sector_read(SectorID.SECTOR_4, "vault:test")
-    g = mem.sector_read(SectorID.GAME, "player:1")
-    f = mem.sector_read(SectorID.FRANK, "output:1")
+    g = mem.sector_read(SectorID.GAME,     "player:1")
+    f = mem.sector_read(SectorID.FRANK,    "output:1")
     assert v["secret"] == "data"
-    assert g["name"] == "Alice"
-    assert f["cmd"] == "deploy"
+    assert g["name"]   == "Alice"
+    assert f["cmd"]    == "deploy"
     print("  ✓ Sector 4 (vault), Game, Frank — all isolated\n")
 
-    # Test 2: Frank cast/reel
     print("TEST 2: Frank cast/reel")
     def build_package(name, version):
         return {"package": name, "version": version, "built": True}
-
     result = mem.cast("build_package", build_package, "helix", "2.0.0")
     assert result.ok
     assert result.result["built"]
     print(f"  ✓ Cast: {result.ring} → reeled back as cast_id={result.cast_id[:8]}...\n")
 
-    # Test 3: PCS torrent model
     print("TEST 3: PCS torrent model")
     for i in range(2000):
-        mem.memory.malloc(f"load_test:{i}", {"data": "x" * 500},
-                          sector=SectorID.GAME)
+        mem.memory.malloc(f"load_test:{i}", {"data": "x" * 500}, sector=SectorID.GAME)
     mem.signal_load(0.8)
-    print(f"  ✓ Load=0.8 → compressions triggered: "
-          f"{mem.pcs.compressions_triggered}\n")
+    print(f"  ✓ Load=0.8 → compressions triggered: {mem.pcs.compressions_triggered}\n")
 
-    # Test 4: Filesystem cache
     print("TEST 4: Filesystem cache")
     test_path = "/tmp/helix_memory_test.txt"
-    mem.fs.write(test_path, b"Phoenix memory stack test data" * 100,
-                 sector=SectorID.SECTOR_4)
-    data = mem.fs.read(test_path, sector=SectorID.SECTOR_4)
-    data2 = mem.fs.read(test_path, sector=SectorID.SECTOR_4)  # cache hit
+    mem.fs.write(test_path, b"Phoenix memory stack test data" * 100, sector=SectorID.SECTOR_4)
+    data  = mem.fs.read(test_path, sector=SectorID.SECTOR_4)
+    data2 = mem.fs.read(test_path, sector=SectorID.SECTOR_4)
     assert data == data2
     print(f"  ✓ Write → read → cache hit ({mem.fs.hits} hits)\n")
 
-    # Test 5: L1/L2/L3 promotion
     print("TEST 5: Cache tier promotion")
     mem.memory.malloc("hot:key", {"val": 42}, sector=SectorID.SECTOR_4)
     for _ in range(5):
         mem.memory.read("hot:key")
     cs = mem.cache.stats()
-    print(f"  ✓ Promotions: {cs['promotions']}  "
-          f"Hit rate: {cs['hit_rate']}%\n")
+    print(f"  ✓ Promotions: {cs['promotions']}  Hit rate: {cs['hit_rate']}%\n")
 
     mem.print_stats()
 
