@@ -121,6 +121,15 @@ def boot():
     spawn = FrankSpawn(frank, library)
     spawn.install()
     log.info("FrankSpawn online — rings ready")
+# Boot paging manager in background thread
+    import helix_memory
+    paging_thread = threading.Thread(
+        target=helix_memory.run,
+        daemon=True,
+        name="helix-paging-manager"
+    )
+    paging_thread.start()
+    log.info("Helix paging manager started — 512MB L1 / 2GB L2 / 8GB L3 / 512GB vRAM")
     spawn.loop()
 
 
