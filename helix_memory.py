@@ -845,6 +845,32 @@ def get_system(helix=None) -> HelixSystem:
         _global_system = HelixSystem(helix=helix)
     return _global_system
 
+def run(data: bytes = b"", ball=None, pcs=None):
+    """
+    Frank suit hook — paging manager.
+    Frank wears this at boot. Runs forever.
+    More load = more compression = more effective RAM = faster.
+    """
+    import psutil
+    import time
+
+    system = get_system()
+    system.start()
+
+    log = __import__('logging').getLogger("helix_memory.run")
+    log.info("Helix paging manager online — monitoring memory pressure")
+
+    while True:
+        try:
+            mem = psutil.virtual_memory()
+            load = mem.percent / 100.0
+            system.signal_load(load)
+            if load > 0.7:
+                log.info(f"Memory pressure {mem.percent:.1f}% — PCS compressing")
+        except Exception as e:
+            log.error(f"Paging manager error: {e}")
+        time.sleep(5)
+
 
 # ============================================================================
 # SELF-TEST
