@@ -1,0 +1,9 @@
+dist/
+__pycache__/
+*.pyc
+*.save
+--*
+Helix_Lightning_Kernel
+*.txt
+Hands
+Cranes
