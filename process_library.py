@@ -147,6 +147,7 @@ class ProcessLibrary:
 
         self._register_core_suits()
         self._register_system_suits()
+        self._register_app_suits()
         self._write_index()
 
         elapsed = (time.monotonic() - start) * 1000
@@ -279,6 +280,73 @@ class ProcessLibrary:
             self._register(spec, tags=["system"])
 
         log.info(f"System suits registered: {len(system_suits)}")
+
+    def _register_app_suits(self):
+        """
+        Register APP suits — game integrations, benchmarks, entourage apps.
+        """
+        # Resolve sector2/apps/ path from PHOENIX_SECTOR2 env
+        sector2 = Path(os.environ.get("PHOENIX_SECTOR2", "/etc/systemd/system/SECTOR2"))
+        apps_dir = sector2 / "apps"
+
+        app_suits = [
+            SuitSpec(
+                name        = "warthunder",
+                suit_type   = SuitType.PYTHON,
+                entry       = str(sector2 / "frank" / "warthunder_suit.py"),
+                sector      = 2,
+                ring_pos    = 10,
+                family      = DataFamily.USER,
+                description = "War Thunder RT interface — telemetry, tactical AI, D1 session logging",
+                permissions = {
+                    "read":      True,
+                    "write":     True,
+                    "clone":     False,
+                    "translate": False,
+                    "delete":    False,
+                    "kernel":    False,
+                }
+            ),
+            SuitSpec(
+                name        = "x4_foundations",
+                suit_type   = SuitType.PYTHON,
+                entry       = str(apps_dir / "x4_foundations.py"),
+                sector      = 2,
+                ring_pos    = 11,
+                family      = DataFamily.USER,
+                description = "X4 Foundations (GOG) — save manager, mod loader, Frank session logging",
+                permissions = {
+                    "read":      True,
+                    "write":     True,
+                    "clone":     False,
+                    "translate": False,
+                    "delete":    False,
+                    "kernel":    False,
+                }
+            ),
+            SuitSpec(
+                name        = "phoronix",
+                suit_type   = SuitType.PYTHON,
+                entry       = str(apps_dir / "phoronix.py"),
+                sector      = 2,
+                ring_pos    = 20,
+                family      = DataFamily.SYSTEM,
+                description = "Phoronix Test Suite — CPU/memory/I/O/network benchmarks, D1 results",
+                permissions = {
+                    "read":      True,
+                    "write":     True,
+                    "clone":     False,
+                    "translate": False,
+                    "delete":    False,
+                    "kernel":    False,
+                }
+            ),
+        ]
+
+        for spec in app_suits:
+            self._register(spec, tags=["app"])
+
+        log.info(f"App suits registered: {len(app_suits)}")
 
     # -------------------------------------------------------------------------
     # Registration
@@ -480,8 +548,23 @@ class ProcessLibrary:
                 if candidate.exists():
                     return str(candidate)
 
-        # Not found — return the name
-        # Frank will try to import it as a module name
+        # Clonepool fallback — pull via lol
+        import subprocess, tempfile
+        try:
+            tmp = Path(tempfile.mkdtemp(prefix="phoenix_suit_"))
+            result = subprocess.run(
+                ["lol", f"{name}.lol"],
+                cwd=str(tmp), capture_output=True, text=True, timeout=10
+            )
+            if result.returncode == 0:
+                matches = list(tmp.glob(f"{name}*"))
+                if matches:
+                    log.info("Clonepool pull: %s → %s", name, matches[0])
+                    return str(matches[0])
+        except Exception as e:
+            log.debug("lol fallback for %s: %s", name, e)
+
+        # Not found anywhere — return the name; Frank will try to import it
         return name
 
     def _detect_suit_type(self, name: str) -> SuitType:
