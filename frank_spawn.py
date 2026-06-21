@@ -93,9 +93,11 @@ class StagePacket:
 class FrankSpawn:
     MAX_WORKERS = 32
 
-    def __init__(self, frank: Optional[Frank5] = None, process_library=None):
+    def __init__(self, frank: Optional[Frank5] = None, process_library=None,
+                 helix_e=None):
         self.frank = frank or get_frank()
         self.library = process_library
+        self.helix_e = helix_e          # egress handle; set by kernel after HelixE built
         self.metrics = SpawnMetrics()
         self._alive = True
         self._lock = threading.Lock()
@@ -182,11 +184,35 @@ class FrankSpawn:
             result = ring.ride(data=packet.data, channel=packet.channel)
             latency = (time.monotonic() - start) * 1000
             self.metrics.record(latency, True)
+
+            # -- Egress bridge: worn-suit output -> Helix-E (no intake/clonepool) --
+            if self.helix_e is not None and result is not None:
+                self._to_egress(packet.channel, result, ring_id=packet.slot)
+
             return result
         except Exception as e:
             latency = (time.monotonic() - start) * 1000
             self.metrics.record(latency, False)
             log.error(f"Ring spawn failed on ch{packet.channel}: {e}")
+
+    def _to_egress(self, channel: int, result, ring_id: int) -> bool:
+        """
+        Route a worn suit's output straight to Helix-E.
+        Deterministic, in-process: result -> bytes -> bus slot -> flush(raw).
+        No intake, no clonepool, no subprocess. raw avoids the shell fork.
+        """
+        try:
+            if isinstance(result, bytes):
+                payload = result
+            elif isinstance(result, str):
+                payload = result.encode("utf-8")
+            else:
+                payload = repr(result).encode("utf-8")
+            self.frank.bus.write_stage(channel - 1, payload)
+            return self.helix_e.flush(channel, ring_id, target_lang="raw")
+        except Exception as e:
+            log.error(f"Egress bridge failed on ch{channel}: {e}")
+            return False
 
     def _resolve_suit(self, packet: StagePacket) -> Optional[SuitSpec]:
         for resolver in self._resolvers:
