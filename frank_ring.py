@@ -192,8 +192,5 @@ class FrankRing:
         )
         return result.stdout
 
-
-# Stub for future snap clone feature
     def _snap_clone(self):
         log.info(f"[Snap Clone] Triggered for ring {self.rec.ring_id if self.rec else 'N/A'}")
-        # TODO: Implement actual cloning logic here later

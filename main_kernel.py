@@ -11,8 +11,8 @@ import sys
 from franken5 import get_frank
 from process_library import boot_library
 from frank_spawn import start_spawn
-from helix_i import HelixI
-from helix_e import HelixE
+from helixi import HelixI
+from helixe import HelixE
 
 log = logging.getLogger("copes_kernel")
 

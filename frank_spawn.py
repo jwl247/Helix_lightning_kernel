@@ -199,10 +199,19 @@ class FrankSpawn:
         return None
 
     def _default_resolver(self, packet: StagePacket) -> Optional[SuitSpec]:
+        if self.library:
+            spec = self.library.resolve(
+                sector   = packet.sector(),
+                ring_pos = packet.meta.get("ring_pos", 0),
+                family   = packet.family(),
+                data     = packet.data,
+            )
+            if spec:
+                return spec
         return suit_for(
-            sector=packet.sector(),
-            ring_pos=packet.meta.get("ring_pos", 0),
-            suit_type=SuitType.PYTHON
+            sector   = packet.sector(),
+            ring_pos = packet.meta.get("ring_pos", 0),
+            suit_type = SuitType.PYTHON
         )
 
     def stop(self):
