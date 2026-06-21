@@ -210,8 +210,9 @@ class FrankSpawn:
                 payload = repr(result).encode("utf-8")
             # Intake channels are 1-4; egress strands are 5-8. Map across.
             egress_channel = channel + 4 if channel <= 4 else channel
-            self.frank.bus.write_stage(egress_channel - 1, payload)
-            return self.helix_e.flush(egress_channel, ring_id, target_lang="raw")
+            ok = self.helix_e.emit(egress_channel, payload, target_lang="raw")
+            log.info(f"BRIDGE ch{channel}->egress{egress_channel}: {len(payload)}b emit={ok}")
+            return ok
         except Exception as e:
             log.error(f"Egress bridge failed on ch{channel}: {e}")
             return False

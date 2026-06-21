@@ -32,7 +32,7 @@ import threading
 import logging
 from pathlib import Path
 from typing import Optional, Callable, Any
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from enum import IntEnum
 
 from franken5 import (
@@ -73,6 +73,7 @@ class EgressChannel:
     outputs:  int = 0     # successful outputs this session
     errors:   int = 0
     _sock:    Optional[socket.socket] = None
+    _consumers: list = field(default_factory=list)
 
 
 class HelixE:
@@ -167,6 +168,33 @@ class HelixE:
                 ch.errors += 1
             log.error(f"Ch{channel_num} flush failed: {e}")
             return False
+
+    def emit(self, channel_num: int, data: bytes, target_lang: str = "raw") -> bool:
+        """Direct egress: translate + send to connected consumers. No bus, no fork."""
+        ch = self.channels.get(channel_num)
+        if not ch:
+            log.error(f"emit: unknown egress channel {channel_num}")
+            return False
+        try:
+            translated = self._translate(data, target_lang, {})
+        except Exception as e:
+            log.error(f"emit: translate failed ch{channel_num}: {e}")
+            return False
+        self._push_output(channel_num, translated, {})
+        dead = []; sent = 0
+        for conn in ch._consumers:
+            try:
+                conn.sendall(translated); sent += 1
+            except Exception:
+                dead.append(conn)
+        for d in dead:
+            try: ch._consumers.remove(d)
+            except ValueError: pass
+            try: d.close()
+            except Exception: pass
+        ch.outputs += 1; ch.flushed += len(translated)
+        log.info(f"emit ch{channel_num}: {len(translated)}b -> {sent} consumer(s)")
+        return True
 
     def flush_async(self, channel_num: int, ring_id: int, target_lang: str = "auto"):
         """
@@ -309,8 +337,10 @@ class HelixE:
         while self._alive:
             try:
                 conn, addr = sock.accept()
-                log.debug(f"Helix-E ch{ch.number} consumer connected: {addr}")
-                conn.close()
+                conn.setsockopt(socket.IPPROTO_TCP, socket.TCP_NODELAY, 1)
+                ch._consumers.append(conn)
+                log.info(f"Helix-E ch{ch.number} consumer connected: {addr} "
+                         f"({len(ch._consumers)} total)")
             except Exception:
                 break
 
